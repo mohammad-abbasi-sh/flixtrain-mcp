@@ -4,6 +4,7 @@ import json
 import pathlib
 import sys
 import unittest
+from datetime import date, timedelta
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
@@ -12,6 +13,11 @@ from flixtrain_mcp import domain as dom
 from flixtrain_mcp import server as srv
 
 FIX = pathlib.Path(__file__).resolve().parent / "fixtures"
+
+# validate_date() rejects past dates, so input dates must stay in the
+# future — a hardcoded date rots the suite (11.11.2026 broke 3 tests
+# on 2026-11-15). Fixture *content* dates below stay as captured.
+FUTURE_DATE = (date.today() + timedelta(days=30)).strftime("%d.%m.%Y")
 
 
 def _read(name):
@@ -28,7 +34,7 @@ class TestValidation(unittest.TestCase):
             dom.validate_limit(21)
 
     def test_date(self):
-        self.assertEqual(dom.validate_date("11.11.2026"), "11.11.2026")
+        self.assertEqual(dom.validate_date(FUTURE_DATE), FUTURE_DATE)
         for bad in ["2026-11-11", "11/11/2026", "32.11.2026",
                     "01.01.2020"]:
             with self.assertRaises(ValueError, msg=bad):
@@ -128,7 +134,7 @@ class TestServerWiring(unittest.TestCase):
         with mock.patch("flixtrain_mcp.server._http.fetch_text",
                         side_effect=self._fetch):
             out = json.loads(srv.flixtrain_search_trains(
-                "Berlin", "Hamburg", "11.11.2026", limit=3))
+                "Berlin", "Hamburg", FUTURE_DATE, limit=3))
         self.assertNotIn("error", out)
         self.assertEqual(out["source"], "global.api.flixbus.com")
         self.assertEqual(out["from_city"], "Berlin")
@@ -143,7 +149,7 @@ class TestServerWiring(unittest.TestCase):
         with mock.patch("flixtrain_mcp.server._http.fetch_text",
                         side_effect=self._fetch):
             out = json.loads(srv.flixtrain_search_trains(
-                "Berlin", "Hamburg", "11.11.2026", sort="price"))
+                "Berlin", "Hamburg", FUTURE_DATE, sort="price"))
         prices = [t["price_eur"] for t in out["items"]]
         self.assertEqual(prices, sorted(prices))
 
@@ -158,7 +164,7 @@ class TestServerWiring(unittest.TestCase):
         with mock.patch("flixtrain_mcp.server._http.fetch_text",
                         side_effect=self._fetch):
             out = json.loads(srv.flixtrain_search_trains(
-                "Berlin", "Berlin", "11.11.2026"))
+                "Berlin", "Berlin", FUTURE_DATE))
         self.assertIn("error", out)
 
     def test_invalid_date(self):
